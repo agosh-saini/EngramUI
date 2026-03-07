@@ -187,3 +187,6 @@ config.local.*
 # testing 
 .ruff*
 
+# tests
+tests/
+

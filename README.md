@@ -29,15 +29,15 @@ pip install pip-tools
 pip-sync requirements.txt
 ```
 
-### 2. Verify Hardware
+### 2. Run Visualization
 
-Before running the main application, verify your board connection and data quality:
+To begin monitoring real-time activity (including EMG and EOG monitoring):
 
 ```bash
-python check_raw.py
+python main.py
 ```
 
-*Note: Ensure your board is connected via USB. The default port is currently set to `/dev/cu.usbserial-A5069RR4`.*
+*Note: The default serial port is currently set to `/dev/cu.usbserial-A5069RR4` in `main.py`.*
 
 ---
 
@@ -45,22 +45,32 @@ python check_raw.py
 
 ### Importing the Interface
 
-To integrate the Knight Board into your own scripts, use the `KnightBoard` class from the `EEG_Streaming` module:
+To integrate the Knight Board and the enhanced FFT processor into your own scripts:
 
 ```python
-from EEG_Streaming import KnightBoard
-import time
+from EEG_Streaming import KnightBoard, EnhancedProcessor
+import matplotlib.pyplot as plt
 
-# Initialize (Default: 8 channels, Gain 10)
+# Configuration
 port = "/dev/cu.usbserial-A5069RR4"
-with KnightBoard(serial_port=port, num_channels=8) as board:
+data_channels = [1, 2, 3, 4]
+ref_channels = [7, 8] # Combined ground and EOG reference
+
+with KnightBoard(serial_port=port, channel_ids=data_channels + ref_channels) as board:
     board.start_stream()
     
-    while True:
+    # Initialize the high-responsiveness processor
+    processor = EnhancedProcessor(board, data_channels, ref_channels)
+    
+    plt.ion()
+    plt.show()
+    
+    while processor.is_plot_active():
         data = board.get_board_data()
         if data.size > 0:
-            print(f"Captured {data.shape[1]} samples")
-        time.sleep(1)
+            processor.update_buffers(data)
+            processor.process_and_plot()
+        plt.pause(0.01)
 ```
 
 ---

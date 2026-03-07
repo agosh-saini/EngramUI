@@ -4,26 +4,32 @@ import brainflow as bf
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
 
 
+from typing import List
+
 class KnightBoard:
-    def __init__(self, serial_port: str, num_channels: int = 8, gain: int = 10):
-        """Initialize and configure the Knight Board."""
+    def __init__(self, serial_port: str, channel_ids: List[int], gain: int = 12):
+        """
+        Initialize and configure the Knight Board.
+        
+        Args:
+            serial_port: Serial port for the board connection.
+            channel_ids: List of channel IDs to configure (e.g., [1, 2, 3, 7, 8]).
+            gain: Gain setting (default 12).
+        """
         self.params = BrainFlowInputParams()
         self.params.serial_port = serial_port
-        # optional: set gain override (default 12)
-        self.params.other_info = '{"gain": 6}'
-        self.num_channels = num_channels
-        self.gain = gain # Defaulting to 12 as per test_default.py chon commands
+        # Set gain override in other_info
+        self.params.other_info = f'{{"gain": {gain}}}'
+        self.channel_ids = channel_ids
+        self.gain = gain
 
         # Initialize board
         self.board_shim = BoardShim(BoardIds.NEUROPAWN_KNIGHT_BOARD.value, self.params)
         self.board_id = self.board_shim.get_board_id()
-        self.eeg_channels = self.board_shim.get_exg_channels(self.board_id)
         self.sampling_rate = self.board_shim.get_sampling_rate(self.board_id)
 
     def start_stream(self, buffer_size: int = 450000):
-        """
-        Start the data stream and configure channels.
-        """
+        """Start the data stream and configure specific channels."""
         if not self.board_shim.is_prepared():
             self.board_shim.prepare_session()
 
@@ -33,11 +39,11 @@ class KnightBoard:
         time.sleep(2)
 
         try:
-            print(f"Applying configuration for {self.num_channels} channels...")
-            for x in range(1, self.num_channels + 1):
+            print(f"Applying configuration for channels: {self.channel_ids}...")
+            for x in self.channel_ids:
                 time.sleep(0.5)
-                # Channel Config - matching hardcoded 12 from test_default.py
-                cmd = f"chon_{x}_12"
+                # Channel Config
+                cmd = f"chon_{x}_{self.gain}"
                 print(f"sending {cmd}")
                 self.board_shim.config_board(cmd)
                 time.sleep(1)
@@ -47,23 +53,29 @@ class KnightBoard:
                 print(f"sending {rld}")
                 self.board_shim.config_board(rld)
                 time.sleep(0.5)
-
+        except Exception as e:
+            print(f"Error during board configuration: {e}")
+            raise
         finally:
             print("Handshake complete.")
 
     def stop_stream(self):
         """Stop the data stream and release resources."""
-        if self.board_shim.is_prepared():
+        if hasattr(self, 'board_shim') and self.board_shim:
             try:
-                self.board_shim.stop_stream()
+                if self.board_shim.is_prepared():
+                    self.board_shim.stop_stream()
+                    self.board_shim.release_session()
             except:
                 pass
-            self.board_shim.release_session()
-            print("Stream stopped.")
+            self.board_shim = None
+        print("Stream stopped and session released.")
 
     def get_board_data(self):
         """Get all data from the board."""
-        return self.board_shim.get_board_data()
+        if self.board_shim:
+            return self.board_shim.get_board_data()
+        return np.array([])
 
     def __enter__(self):
         return self
